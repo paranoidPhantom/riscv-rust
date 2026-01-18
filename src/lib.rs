@@ -66,35 +66,86 @@ impl Cpu {
         }
     }
     pub fn execute(&mut self) -> Result<(), CpuError> {
-        if self.pc >= self.instructions.len() {
+        if self.pc / 4 > self.instructions.len() - 1 {
             return Err(CpuError::PCOutOfBounds);
         }
-        let instruction = self.instructions[self.pc].clone();
+        let instruction = self.instructions[self.pc / 4].clone();
         let instruction: Instruction = instruction.try_into()?;
         dbg!(&instruction);
         match instruction {
             Instruction::Register { i, rd, rs1, rs2 } => {
-                match i {
-                    RInstruction::Add => {
-                        self.registers[rd as usize] = self.registers[rs1 as usize] + self.registers[rs2 as usize];
-                    }
-                    _ => println!("{:?} not supported yet", i)
-                }
+                let closure = match i {
+                    RInstruction::Add => |a,b| a + b,
+                    RInstruction::Sub => |a,b| a - b,
+                    RInstruction::Xor => |a,b| a ^ b,
+                    RInstruction::Or => |a,b| a | b,
+                    RInstruction::And => |a,b| a & b,
+                    RInstruction::Sll => |a,b| a << b,
+                    RInstruction::Srl => |a,b| (a as u32 >> b as u32) as i32,
+                    RInstruction::Sra => |a,b| a >> b,
+                    RInstruction::Slt => |a,b| if a < b { 1 } else { 0 },
+                    RInstruction::Sltu => |a,b| if (a as u32) < (b as u32) { 1 } else { 0 },
+                };
+                self.registers[rd as usize] = closure(self.registers[rs1 as usize], self.registers[rs2 as usize]);
             },
             Instruction::Immediate { i, rd, rs1, imm } => {
-                match i {
-                    IInstruction::Addi => {
-                        self.registers[rd as usize] = self.registers[rs1 as usize] + imm;
+                // this is disgusting, but I prefer it over bypassing static analysis using nested
+                // match statements
+                // we heap allocate, because trait objects are not sized, and being inside an
+                // Option seems to require that
+                let closure: Option<Box<dyn Fn(i32, i32) -> i32>> = match i {
+                    IInstruction::Addi => Some(Box::new(|a,b| a + b)),
+                    IInstruction::Xori => Some(Box::new(|a,b| a ^ b)),
+                    IInstruction::Ori =>  Some(Box::new(|a,b| a | b)),
+                    IInstruction::Andi => Some(Box::new(|a,b| a & b)),
+                    IInstruction::Slli => Some(Box::new(|a,b| a << b)),
+                    IInstruction::Srli => Some(Box::new(|a,b| (a as u32 >> b as u32) as i32)),
+                    IInstruction::Srai => Some(Box::new(|a,b| a >> b)),
+                    IInstruction::Slti => Some(Box::new(|a,b| if a < b { 1 } else { 0 })),
+                    IInstruction::Sltiu => Some(Box::new(|a,b| if (a as u32) < (b as u32) { 1 } else { 0 })),
+                    IInstruction::Lb => {
+                        self.registers[rd as usize] = self.memory[self.registers[rs1 as usize] as usize + imm as usize] as i8 as i32;
+                        None
                     }
-                    _ => println!("{:?} not supported yet", i)
+                    IInstruction::Lh => {
+                        self.registers[rd as usize] = self.memory[self.registers[rs1 as usize] as usize + imm as usize] as i16 as i32;
+                        None
+                    }
+                    IInstruction::Lw => {
+                        self.registers[rd as usize] = self.memory[self.registers[rs1 as usize] as usize + imm as usize];
+                        None
+                    }
+                    IInstruction::Lbu => {
+                        self.registers[rd as usize] = self.memory[self.registers[rs1 as usize] as usize + imm as usize] as u8 as i32;
+                        None
+                    }
+                    IInstruction::Lhu => {
+                        self.registers[rd as usize] = self.memory[self.registers[rs1 as usize] as usize + imm as usize] as u16 as i32;
+                        None
+                    }
+                    IInstruction::Jalr => {
+                        self.registers[rd as usize] = self.pc as i32 + 4;
+                        self.pc = self.registers[rs1 as usize + imm as usize] as usize;
+                        return Ok(());
+                    }
+                };
+                if let Some(callable_closure) = closure {
+                    self.registers[rd as usize] = callable_closure(self.registers[rs1 as usize], imm);
                 }
             },
             Instruction::Store { i, rs1, rs2, imm } => {
                 match i {
                     SInstruction::Sb => {
-                        
+                        let old = self.registers[rs1 as usize + imm as usize];
+                        self.registers[rs1 as usize + imm as usize] = (old ^ (old as u8) as i32) + self.registers[rs2 as usize] as i8 as i32;
                     }
-                    _ => println!("{:?} not supported yet", i)
+                    SInstruction::Sh => {
+                        let old = self.registers[rs1 as usize + imm as usize];
+                        self.registers[rs1 as usize + imm as usize] = (old ^ (old as u16) as i32) + self.registers[rs2 as usize] as i16 as i32;
+                    }
+                    SInstruction::Sw => {
+                        self.registers[rs1 as usize + imm as usize] = self.registers[rs2 as usize];
+                    }
                 }
             },
             Instruction::Branch { i, rs1, rs2, imm } => {
@@ -102,30 +153,62 @@ impl Cpu {
                     BInstruction::Beq => {
                         if self.registers[rs1 as usize] == self.registers[rs2 as usize] {
                             self.pc += imm as usize;
+                            return Ok(()); // avoid further program counter incrementation
                         }
                     }
-                    _ => println!("{:?} not supported yet", i)
+                    BInstruction::Bne => {
+                        if self.registers[rs1 as usize] != self.registers[rs2 as usize] {
+                            self.pc += imm as usize;
+                            return Ok(());
+                        }
+                    }
+                    BInstruction::Blt => {
+                        if self.registers[rs1 as usize] < self.registers[rs2 as usize] {
+                            self.pc += imm as usize;
+                            return Ok(());
+                        }
+                    }
+                    BInstruction::Bge => {
+                        if self.registers[rs1 as usize] >= self.registers[rs2 as usize] {
+                            self.pc += imm as usize;
+                            return Ok(());
+                        }
+                    }
+                    BInstruction::Bltu => {
+                        if (self.registers[rs1 as usize] as u32) < self.registers[rs2 as usize] as u32 {
+                            self.pc += imm as usize;
+                            return Ok(());
+                        }
+                    }
+                    BInstruction::Bgeu => {
+                        if self.registers[rs1 as usize] as u32 >= self.registers[rs2 as usize] as u32 {
+                            self.pc += imm as usize;
+                            return Ok(());
+                        }
+                    }
                 }
             },
             Instruction::UpperImmediate { i, rd, imm }=> {
                 match i {
                     UInstruction::Lui => {
-
+                        self.registers[rd as usize] = imm << 12;
                     }
-                    _ => println!("{:?} not supported yet", i)
+                    UInstruction::Auipc => {
+                        self.registers[rd as usize] = self.pc as i32 + (imm << 12);
+                    }
                 }
             },
             Instruction::Jump { i, rd, imm } => {
                 match i {
                     JInstruction::Jal => {
-
+                        self.registers[rd as usize] = self.pc as i32 + 4;
+                        self.pc = imm as usize;
+                        return Ok(());
                     }
-                    _ => println!("{:?} not supported yet", i)
                 }
             },
-            _ => println!("{:?} not supported yet", instruction)
         }
-        self.pc += 1;
+        self.pc += 4;
         Ok(())
     }
     pub fn memory(&self) -> Box<[i32; MEMORY_SIZE]> {
