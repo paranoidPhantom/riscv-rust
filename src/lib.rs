@@ -5,7 +5,7 @@ use instruction::Instruction;
 
 use crate::instruction::{RInstruction, IInstruction, SInstruction, BInstruction, UInstruction, JInstruction};
 
-const REGISTER_COUNT: usize = 32;
+const REGISTER_COUNT: usize = 33;
 const MEMORY_SIZE: usize = 2048;
 
 #[derive(Debug)]
@@ -27,7 +27,7 @@ impl Default for Cpu {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum CpuError {
     InvalidOpcode,
     InvalidFunct,
@@ -71,7 +71,6 @@ impl Cpu {
         }
         let instruction = self.instructions[self.pc / 4].clone();
         let instruction: Instruction = instruction.try_into()?;
-        dbg!(&instruction);
         match instruction {
             Instruction::Register { i, rd, rs1, rs2 } => {
                 let closure = match i {
@@ -136,15 +135,15 @@ impl Cpu {
             Instruction::Store { i, rs1, rs2, imm } => {
                 match i {
                     SInstruction::Sb => {
-                        let old = self.registers[rs1 as usize + imm as usize];
-                        self.registers[rs1 as usize + imm as usize] = (old ^ (old as u8) as i32) + self.registers[rs2 as usize] as i8 as i32;
+                        let old = self.memory[rs1 as usize + imm as usize];
+                        self.memory[rs1 as usize + imm as usize] = (old ^ (old as u8) as i32) + self.registers[rs2 as usize] as i8 as i32;
                     }
                     SInstruction::Sh => {
-                        let old = self.registers[rs1 as usize + imm as usize];
-                        self.registers[rs1 as usize + imm as usize] = (old ^ (old as u16) as i32) + self.registers[rs2 as usize] as i16 as i32;
+                        let old = self.memory[rs1 as usize + imm as usize];
+                        self.memory[rs1 as usize + imm as usize] = (old ^ (old as u16) as i32) + self.registers[rs2 as usize] as i16 as i32;
                     }
                     SInstruction::Sw => {
-                        self.registers[rs1 as usize + imm as usize] = self.registers[rs2 as usize];
+                        self.memory[rs1 as usize + imm as usize] = self.registers[rs2 as usize];
                     }
                 }
             },
@@ -202,7 +201,7 @@ impl Cpu {
                 match i {
                     JInstruction::Jal => {
                         self.registers[rd as usize] = self.pc as i32 + 4;
-                        self.pc = imm as usize;
+                        self.pc += imm as usize;
                         return Ok(());
                     }
                 }
