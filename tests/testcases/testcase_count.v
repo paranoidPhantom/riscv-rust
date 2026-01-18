@@ -1,0 +1,16 @@
+`define testcase_count_lw 4096
+`define testcase_count_sw 4096
+`define testcase_count_add 1721
+`define testcase_count_sub 1721
+`define testcase_count_and 1721
+`define testcase_count_or 1721
+`define testcase_count_slt 1721
+`define testcase_count_beq 1721
+`define testcase_count_addi 2048
+`define testcase_count_bne 1721
+`define testcase_count_blt 1721
+`define testcase_count_lui 2048
+`define testcase_count_jal 2048
+`define testcase_count_jalr 2048
+`define testcase_count_max 4096
+`define testcase_width 732
