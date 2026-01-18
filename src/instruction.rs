@@ -112,14 +112,14 @@ impl TryFrom<String> for Instruction {
                 let i = match (f3, f7) {
                     ("000", "0000000") => Ok(RInstruction::Add),
                     ("000", "0100000") => Ok(RInstruction::Sub),
-                    ("004", "0000000") => Ok(RInstruction::Xor),
-                    ("006", "0000000") => Ok(RInstruction::Or),
-                    ("007", "0000000") => Ok(RInstruction::And),
+                    ("100", "0000000") => Ok(RInstruction::Xor),
+                    ("110", "0000000") => Ok(RInstruction::Or),
+                    ("111", "0000000") => Ok(RInstruction::And),
                     ("001", "0000000") => Ok(RInstruction::Sll),
-                    ("005", "0000000") => Ok(RInstruction::Srl),
-                    ("005", "0100000") => Ok(RInstruction::Sra),
-                    ("002", "0000000") => Ok(RInstruction::Slt),
-                    ("003", "0000000") => Ok(RInstruction::Sltu),
+                    ("101", "0000000") => Ok(RInstruction::Srl),
+                    ("101", "0100000") => Ok(RInstruction::Sra),
+                    ("010", "0000000") => Ok(RInstruction::Slt),
+                    ("011", "0000000") => Ok(RInstruction::Sltu),
                     (&_, &_) => Err(CpuError::InvalidFunct)
                 }?;
                 Ok(Instruction::Register { i, rd, rs1, rs2 })
@@ -133,14 +133,14 @@ impl TryFrom<String> for Instruction {
                     "0010011" => {
                         match (f3, f7) {
                             ("000", &_) => Ok(IInstruction::Addi),
-                            ("004", &_) => Ok(IInstruction::Xori),
-                            ("006", &_) => Ok(IInstruction::Ori),
-                            ("007", &_) => Ok(IInstruction::Andi),
+                            ("100", &_) => Ok(IInstruction::Xori),
+                            ("110", &_) => Ok(IInstruction::Ori),
+                            ("111", &_) => Ok(IInstruction::Andi),
                             ("001", "0000000") => Ok(IInstruction::Slli),
-                            ("005", "0000000") => Ok(IInstruction::Srli),
-                            ("005", "0100000") => Ok(IInstruction::Srai),
-                            ("002", &_) => Ok(IInstruction::Slti),
-                            ("003", &_) => Ok(IInstruction::Sltiu),
+                            ("101", "0000000") => Ok(IInstruction::Srli),
+                            ("101", "0100000") => Ok(IInstruction::Srai),
+                            ("010", &_) => Ok(IInstruction::Slti),
+                            ("011", &_) => Ok(IInstruction::Sltiu),
                             (&_, &_) => Err(CpuError::InvalidFunct)
                         }
                     },
@@ -148,9 +148,9 @@ impl TryFrom<String> for Instruction {
                         match f3 {
                             "000" => Ok(IInstruction::Lb),
                             "001" => Ok(IInstruction::Lh),
-                            "002" => Ok(IInstruction::Lw),
-                            "004" => Ok(IInstruction::Lbu),
-                            "005" => Ok(IInstruction::Lhu),
+                            "010" => Ok(IInstruction::Lw),
+                            "100" => Ok(IInstruction::Lbu),
+                            "101" => Ok(IInstruction::Lhu),
                             &_ => Err(CpuError::InvalidFunct)
                         }
                     },
@@ -168,24 +168,24 @@ impl TryFrom<String> for Instruction {
                 let i = match f3 {
                     "000" => Ok(SInstruction::Sb),
                     "001" => Ok(SInstruction::Sh),
-                    "002" => Ok(SInstruction::Sw),
+                    "010" => Ok(SInstruction::Sw),
                     &_ => Err(CpuError::InvalidFunct)
                 }?;
                 Ok(Instruction::Store { i, rs1, rs2, imm })
             },
             "1100011" => {
                 // B
-                let rs1 = u32::from_str_radix(&instruction[12..16], 2).map_err(|_| CpuError::InvalidRs1)?;
-                let rs2 = u32::from_str_radix(&instruction[7..11], 2).map_err(|_| CpuError::InvalidRs2)?;
+                let rs1 = u32::from_str_radix(&instruction[12..=16], 2).map_err(|_| CpuError::InvalidRs1)?;
+                let rs2 = u32::from_str_radix(&instruction[7..=11], 2).map_err(|_| CpuError::InvalidRs2)?;
                 let imm = format!("{}{}{}{}0", instruction.chars().nth(0).expect("len == 32"), &instruction.chars().nth(24).expect("len == 32"), &instruction[1..=6], &instruction[20..=23]);
                 let imm = i32::from_str_radix(&imm, 2).map_err(|_| CpuError::InvalidImm)?;
                 let i = match f3 {
                     "000" => Ok(BInstruction::Beq),
                     "001" => Ok(BInstruction::Bne),
-                    "004" => Ok(BInstruction::Blt),
-                    "005" => Ok(BInstruction::Bge),
-                    "006" => Ok(BInstruction::Bltu),
-                    "007" => Ok(BInstruction::Bgeu),
+                    "100" => Ok(BInstruction::Blt),
+                    "101" => Ok(BInstruction::Bge),
+                    "110" => Ok(BInstruction::Bltu),
+                    "111" => Ok(BInstruction::Bgeu),
                     &_ => Err(CpuError::InvalidFunct)
                 }?;
                 Ok(Instruction::Branch { i, rs1, rs2, imm })
